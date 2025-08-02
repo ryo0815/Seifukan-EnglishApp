@@ -2,8 +2,17 @@
 
 import { useState, useRef, useEffect } from "react"
 import { Button } from "@/components/ui/button"
-import { Card } from "@/components/ui/card"
-import { Mic, Square, SkipForward, CheckCircle, XCircle } from "lucide-react"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import { Mic, Square, SkipForward } from "lucide-react"
 
 interface AISpeakingPracticeProps {
   targetText: string
@@ -156,6 +165,7 @@ export function AISpeakingPractice({
 
   const processSpeech = async () => {
     if (audioChunks.current.length === 0) {
+      console.log("[Speech Processing] No audio chunks recorded.");
       setIsProcessing(false)
       return
     }
@@ -164,11 +174,10 @@ export function AISpeakingPractice({
       const audioBlob = new Blob(audioChunks.current, { type: recorderMimeType.current })
       console.log(`[Speech Processing] Created audioBlob with size: ${audioBlob.size}`);
 
-      if (audioBlob.size < 500) { // Check for a minimal size (500 bytes)
-        console.error("[Speech Processing] Recorded audio blob is too small. Probably silence.");
+      if (audioBlob.size < 1000) { // Increased minimum size
+        console.error("[Speech Processing] Recorded audio blob is too small.");
         alert("録音された音声が短すぎるか、無音です。もう一度お試しください。");
         setIsProcessing(false);
-        onIncorrect();
         return;
       }
       
@@ -185,9 +194,7 @@ export function AISpeakingPractice({
       const result = await response.json()
 
       if (response.ok) {
-        setEvaluationResult(result)
-        // The onComplete callback is now only responsible for marking the phrase as complete.
-        // The user explicitly clicks "Next" or "Retry" to proceed.
+        setEvaluationResult(result) // Show dialog
         if (result.isPass) {
           onComplete(result.pronunciationScore)
         } else {
@@ -199,82 +206,78 @@ export function AISpeakingPractice({
 
     } catch (error) {
       console.error("Evaluation processing error:", error)
-      alert("音声の処理に失敗しました。もう一度お試しください。")
-      setEvaluationResult(null) // Clear any previous results
+      alert(`音声の処理に失敗しました: ${(error as Error).message}`)
+      setEvaluationResult(null)
       onIncorrect()
     } finally {
       setIsProcessing(false)
     }
   }
   
-  // This function is called when the user wants to try the same question again
-  const handleRetry = () => {
+  const handleDialogContinue = () => {
+    onNextQuestion();
     setEvaluationResult(null);
-    setIsProcessing(false);
-    setIsRecording(false);
-    onIncorrect(); // This will keep the user on the same question
-  }
+  };
 
-  if (evaluationResult) {
-    const { grade, isPass, advice, pronunciationScore } = evaluationResult;
-    return (
-      <Card className={`p-6 text-center space-y-4 rounded-2xl ${isPass ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
-        <div className="flex items-center justify-center gap-4">
-           <h3 className={`text-6xl font-bold ${isPass ? 'text-green-500' : 'text-red-500'}`}>{grade}</h3>
-           <div>
-              <p className={`px-4 py-1 rounded-full text-lg font-semibold ${isPass ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                {isPass ? '合格' : '不合格'}
-              </p>
-              {/* <p className="text-sm text-slate-500 mt-1">スコア: {pronunciationScore}</p> */}
-           </div>
-        </div>
-
-        <div className="text-left bg-white p-4 rounded-lg space-y-2">
-            <h4 className="font-bold text-slate-700">改善アドバイス</h4>
-            <ul className="list-disc list-inside text-slate-600 space-y-1">
-                {advice.map((item, index) => <li key={index} className="text-sm">{item}</li>)}
-            </ul>
-        </div>
-        
-        <div className="flex flex-col space-y-3 pt-2">
-            <Button onClick={onNextQuestion} size="lg">
-                次へ
-            </Button>
-            {!isPass && (
-                <Button onClick={handleRetry} variant="outline" size="lg">
-                    再挑戦
-                </Button>
-            )}
-        </div>
-      </Card>
-    )
-  }
+  const handleDialogRetry = () => {
+    setEvaluationResult(null);
+  };
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col items-center space-y-6">
-        <Button
-          onClick={isRecording ? stopRecording : startRecording}
-          disabled={isProcessing}
-          size="lg"
-          className={`w-32 h-32 rounded-full text-white ${isRecording ? 'bg-red-500' : 'bg-blue-500'}`}
-        >
-          {isProcessing ? (
-            <span
-              className="text-base font-semibold whitespace-nowrap"
-              style={{ fontSize: '1.1rem', letterSpacing: '0.05em' }}
-            >
-              評価中...
-            </span>
-          ) : (
-            isRecording ? <Square className="w-12 h-12" /> : <Mic className="w-12 h-12" />
-          )}
-        </Button>
-        <Button variant="outline" onClick={onNextQuestion} disabled={isProcessing}>
-          <SkipForward className="w-4 h-4 mr-2" />
-          スキップ
-        </Button>
+    <>
+      <div className="space-y-6">
+        <div className="flex flex-col items-center space-y-6">
+          <Button
+            onClick={isRecording ? stopRecording : startRecording}
+            disabled={isProcessing}
+            size="lg"
+            className={`w-32 h-32 rounded-full text-white ${isRecording ? 'bg-red-500' : 'bg-blue-500'}`}
+          >
+            {isProcessing ? (
+              <span
+                className="text-base font-semibold whitespace-nowrap"
+                style={{ fontSize: '1.1rem', letterSpacing: '0.05em' }}
+              >
+                評価中...
+              </span>
+            ) : (
+              isRecording ? <Square className="w-12 h-12" /> : <Mic className="w-12 h-12" />
+            )}
+          </Button>
+          <Button variant="outline" onClick={onNextQuestion} disabled={isProcessing}>
+            <SkipForward className="w-4 h-4 mr-2" />
+            スキップ
+          </Button>
+        </div>
       </div>
-    </div>
+
+      {evaluationResult && (
+        <AlertDialog open={!!evaluationResult}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle className={`text-2xl font-bold ${evaluationResult.isPass ? 'text-green-500' : 'text-red-500'}`}>
+                {evaluationResult.isPass ? '合格！' : 'もう一回！'} ({evaluationResult.grade})
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                <div className="text-left bg-white p-4 rounded-lg space-y-2 mt-4">
+                  <h4 className="font-bold text-slate-700">改善アドバイス</h4>
+                  <ul className="list-disc list-inside text-slate-600 space-y-1">
+                      {evaluationResult.advice.map((item, index) => <li key={index} className="text-sm">{item}</li>)}
+                  </ul>
+                </div>
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              {!evaluationResult.isPass && (
+                <AlertDialogCancel onClick={handleDialogRetry}>再挑戦</AlertDialogCancel>
+              )}
+              <AlertDialogAction onClick={handleDialogContinue}>
+                次へ
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
+    </>
   )
 } 
