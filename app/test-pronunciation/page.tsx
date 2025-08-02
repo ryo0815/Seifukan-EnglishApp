@@ -14,6 +14,7 @@ export default function TestPronunciationPage() {
   const [error, setError] = useState<string | null>(null)
   
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const streamRef = useRef<MediaStream | null>(null)
 
   const testPhrases = [
     { text: 'Sorry', description: 'カタカナ発音: ソーリー' },
@@ -27,16 +28,13 @@ export default function TestPronunciationPage() {
   const currentPhrase = testPhrases[currentPhraseIndex]
 
   const startRecording = async () => {
+    setAudioData(null)
+    setEvaluation(null)
+    setError(null)
+    
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        audio: {
-          sampleRate: 16000,
-          channelCount: 1,
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true
-        } 
-      })
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      streamRef.current = stream
       
       const mediaRecorder = new MediaRecorder(stream, {
         mimeType: 'audio/webm;codecs=opus'
@@ -51,21 +49,22 @@ export default function TestPronunciationPage() {
       mediaRecorder.onstop = () => {
         const blob = new Blob(chunks, { type: 'audio/webm' })
         setAudioData(blob)
-        stream.getTracks().forEach(track => track.stop())
+        streamRef.current?.getTracks().forEach(track => track.stop())
+        setIsRecording(false)
       }
 
       mediaRecorder.start()
       setIsRecording(true)
 
-      // 5秒後に自動停止
       setTimeout(() => {
         if (mediaRecorderRef.current?.state === 'recording') {
           mediaRecorderRef.current.stop()
         }
-      }, 5000)
+      }, 5000) // 5 seconds max
     } catch (err) {
       console.error('Recording error:', err)
-      setError('録音に失敗しました')
+      setError('マイクへのアクセスに失敗しました。ブラウザの権限を確認してください。')
+      setIsRecording(false)
     }
   }
 
@@ -82,7 +81,6 @@ export default function TestPronunciationPage() {
     setError(null)
 
     try {
-      // Convert to WAV format
       const wavBlob = await convertToWav(audioData)
       
       const formData = new FormData()
@@ -104,7 +102,7 @@ export default function TestPronunciationPage() {
       setEvaluation(result)
     } catch (err) {
       console.error('Evaluation error:', err)
-      setError('評価中にエラーが発生しました')
+      setError(err instanceof Error ? err.message : '評価中に不明なエラーが発生しました')
     } finally {
       setIsEvaluating(false)
     }
@@ -112,61 +110,72 @@ export default function TestPronunciationPage() {
 
   const convertToWav = async (blob: Blob): Promise<Blob> => {
     try {
-      // Web Audio APIを使用してWAV形式に変換
-      const audioContext = new (window as any).AudioContext({ sampleRate: 16000 })
-      const arrayBuffer = await blob.arrayBuffer()
-      const audioBuffer = await audioContext.decodeAudioData(arrayBuffer)
-      
-      // WAV形式に変換
-      const wavBlob = await audioBufferToWav(audioBuffer)
-      return wavBlob
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const arrayBuffer = await blob.arrayBuffer();
+      const originalBuffer = await audioContext.decodeAudioData(arrayBuffer);
+
+      const targetSampleRate = 16000;
+      const offlineContext = new OfflineAudioContext(
+        1, // 1 channel (mono)
+        originalBuffer.duration * targetSampleRate,
+        targetSampleRate
+      );
+
+      const source = offlineContext.createBufferSource();
+      source.buffer = originalBuffer;
+      source.connect(offlineContext.destination);
+      source.start();
+
+      const resampledBuffer = await offlineContext.startRendering();
+      const wavBlob = audioBufferToWav(resampledBuffer);
+      return wavBlob;
     } catch (error) {
-      console.error('WAV conversion error:', error)
-      // フォールバック: 元のblobを返すのをやめ、エラーを投げる
+      console.error('WAV conversion error:', error);
       throw new Error('音声ファイルのWAV形式への変換に失敗しました。');
     }
   }
 
-  const audioBufferToWav = async (audioBuffer: AudioBuffer): Promise<Blob> => {
-    const length = audioBuffer.length
-    const numberOfChannels = audioBuffer.numberOfChannels
-    const sampleRate = audioBuffer.sampleRate
-    const arrayBuffer = new ArrayBuffer(44 + length * numberOfChannels * 2)
-    const view = new DataView(arrayBuffer)
+  const audioBufferToWav = (buffer: AudioBuffer): Blob => {
+    const numChannels = 1; // Mono
+    const sampleRate = 16000;
+    const bitDepth = 16;
+    const length = buffer.length;
+
+    const dataSize = length * numChannels * (bitDepth / 8);
+    const bufferSize = 44 + dataSize;
     
-    // WAVヘッダー
+    const arrayBuffer = new ArrayBuffer(bufferSize);
+    const view = new DataView(arrayBuffer);
+
     const writeString = (offset: number, string: string) => {
       for (let i = 0; i < string.length; i++) {
-        view.setUint8(offset + i, string.charCodeAt(i))
+        view.setUint8(offset + i, string.charCodeAt(i));
       }
-    }
-    
-    writeString(0, 'RIFF')
-    view.setUint32(4, 36 + length * numberOfChannels * 2, true)
-    writeString(8, 'WAVE')
-    writeString(12, 'fmt ')
-    view.setUint32(16, 16, true)
-    view.setUint16(20, 1, true)
-    view.setUint16(22, numberOfChannels, true)
-    view.setUint32(24, sampleRate, true)
-    view.setUint32(28, sampleRate * numberOfChannels * 2, true)
-    view.setUint16(32, numberOfChannels * 2, true)
-    view.setUint16(34, 16, true)
-    writeString(36, 'data')
-    view.setUint32(40, length * numberOfChannels * 2, true)
-    
-    // 音声データ (マルチチャンネル対応)
-    let offset = 44
+    };
+
+    writeString(0, 'RIFF');
+    view.setUint32(4, 36 + dataSize, true);
+    writeString(8, 'WAVE');
+    writeString(12, 'fmt ');
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true); // PCM
+    view.setUint16(22, numChannels, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * numChannels * (bitDepth / 8), true); // byteRate
+    view.setUint16(32, numChannels * (bitDepth / 8), true); // blockAlign
+    view.setUint16(34, bitDepth, true);
+    writeString(36, 'data');
+    view.setUint32(40, dataSize, true);
+
+    const channelData = buffer.getChannelData(0);
+    let offset = 44;
     for (let i = 0; i < length; i++) {
-      for (let channel = 0; channel < numberOfChannels; channel++) {
-        const channelData = audioBuffer.getChannelData(channel)
-        const sample = Math.max(-1, Math.min(1, channelData[i]))
-        view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7FFF, true)
-        offset += 2
-      }
+      const sample = Math.max(-1, Math.min(1, channelData[i]));
+      view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7FFF, true);
+      offset += 2;
     }
-    
-    return new Blob([arrayBuffer], { type: 'audio/wav' })
+
+    return new Blob([view], { type: 'audio/wav' });
   }
 
   const nextPhrase = () => {
