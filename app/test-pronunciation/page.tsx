@@ -91,55 +91,13 @@ export default function TestPronunciationPage() {
       })
 
       if (!response.ok) {
-        throw new Error('Evaluation failed')
+        const errorData = await response.json().catch(() => ({ error: 'Evaluation failed with no data' }))
+        throw new Error(errorData.error || 'Evaluation failed')
       }
 
-      const azureResult = await response.json()
+      const result = await response.json()
       
-      // お手本音声との比較評価を実行
-      const comparisonFormData = new FormData()
-      comparisonFormData.append('audio', wavBlob, 'recording.wav')
-      comparisonFormData.append('referenceText', currentPhrase.text)
-      comparisonFormData.append('userRecognizedText', azureResult.recognizedText || '')
-      comparisonFormData.append('userProsody', JSON.stringify(azureResult.azureData?.NBest?.[0] || {}))
-      
-      const comparisonResponse = await fetch('/api/pronunciation-comparison', {
-        method: 'POST',
-        body: comparisonFormData
-      })
-      
-      if (!comparisonResponse.ok) {
-        throw new Error('Comparison evaluation failed')
-      }
-      
-      const comparisonResult = await comparisonResponse.json()
-      
-      // 結果を統合（カタカナ検出を優先）
-      let finalGrade = azureResult.overallGrade
-      let finalScore = azureResult.pronunciationScore
-      
-      // カタカナが検出された場合は、より厳しい判定を採用
-      if (azureResult.katakanaDetection?.detected || comparisonResult.result?.katakanaDetection?.detected) {
-        const azureConfidence = azureResult.katakanaDetection?.confidence || 0
-        const comparisonConfidence = comparisonResult.result?.katakanaDetection?.confidence || 0
-        const maxConfidence = Math.max(azureConfidence, comparisonConfidence)
-        
-        if (maxConfidence > 0.5) {
-          finalGrade = 'C'
-          finalScore = Math.min(azureResult.pronunciationScore, comparisonResult.result?.pronunciationScore || 0)
-          console.log('=== FINAL KATAKANA DETECTION - FORCED C GRADE ===')
-        }
-      }
-      
-      const finalResult = {
-        ...azureResult,
-        ...comparisonResult.result,
-        overallGrade: finalGrade,
-        pronunciationScore: finalScore,
-        comparisonData: comparisonResult.result
-      }
-      
-      setEvaluation(finalResult)
+      setEvaluation(result)
     } catch (err) {
       console.error('Evaluation error:', err)
       setError('評価中にエラーが発生しました')
