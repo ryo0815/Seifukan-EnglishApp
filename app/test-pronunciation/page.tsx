@@ -118,8 +118,8 @@ export default function TestPronunciationPage() {
       return wavBlob
     } catch (error) {
       console.error('WAV conversion error:', error)
-      // フォールバック: 元のblobを返す
-      return blob
+      // フォールバック: 元のblobを返すのをやめ、エラーを投げる
+      throw new Error('音声ファイルのWAV形式への変換に失敗しました。');
     }
   }
 
@@ -248,8 +248,8 @@ export default function TestPronunciationPage() {
             {evaluation ? (
               <div className="space-y-4">
                 <div className="flex items-center gap-4">
-                  <Badge className={`text-white ${getGradeColor(evaluation.overallGrade)}`}>
-                    {evaluation.overallGrade}
+                  <Badge className={`text-white ${getGradeColor(evaluation.grade)}`}>
+                    {evaluation.grade}
                   </Badge>
                   <span className="text-lg font-semibold">
                     {evaluation.pronunciationScore}/100点
@@ -285,44 +285,16 @@ export default function TestPronunciationPage() {
                     </div>
                   </div>
 
-                                     {/* カタカナ発音検出結果 */}
-                   <div className="p-3 bg-yellow-100 border border-yellow-300 rounded-lg">
-                     <h4 className="font-semibold text-yellow-800 mb-2">カタカナ発音検出</h4>
-                     <p className="text-sm text-yellow-700">
-                       検出: {evaluation.detailedAnalysis?.katakanaDetection?.detected ? 'はい' : 'いいえ'}
-                     </p>
-                     <p className="text-sm text-yellow-700">
-                       信頼度: {Math.round((evaluation.detailedAnalysis?.katakanaDetection?.confidence || 0) * 100)}%
-                     </p>
-                     {evaluation.detailedAnalysis?.katakanaDetection?.patterns?.length > 0 && (
-                       <div className="mt-2">
-                         <p className="text-sm font-medium text-yellow-800">検出パターン:</p>
-                         <ul className="text-sm text-yellow-700 list-disc list-inside">
-                           {evaluation.detailedAnalysis.katakanaDetection.patterns.map((pattern: string, index: number) => (
-                             <li key={index}>{pattern}</li>
-                           ))}
-                         </ul>
-                       </div>
-                     )}
-                   </div>
-
-                  <div>
-                    <label className="text-sm font-medium">改善点:</label>
-                    <ul className="list-disc list-inside text-sm text-gray-700">
-                      {evaluation.improvements.map((improvement: string, index: number) => (
-                        <li key={index}>{improvement}</li>
-                      ))}
-                    </ul>
-                  </div>
-
-                  <div>
-                    <label className="text-sm font-medium">良い点:</label>
-                    <ul className="list-disc list-inside text-sm text-gray-700">
-                      {evaluation.positives.map((positive: string, index: number) => (
-                        <li key={index}>{positive}</li>
-                      ))}
-                    </ul>
-                  </div>
+                  {evaluation.advice && evaluation.advice.length > 0 && (
+                    <div>
+                      <label className="text-sm font-medium">アドバイス:</label>
+                      <ul className="list-disc list-inside text-sm text-gray-700">
+                        {evaluation.advice.map((item: string, index: number) => (
+                          <li key={index}>{item}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                 </div>
               </div>
             ) : (
