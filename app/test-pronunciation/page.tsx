@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -12,6 +12,8 @@ export default function TestPronunciationPage() {
   const [evaluation, setEvaluation] = useState<any>(null)
   const [isEvaluating, setIsEvaluating] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
 
   const testPhrases = [
     { text: 'Sorry', description: 'カタカナ発音: ソーリー' },
@@ -39,6 +41,7 @@ export default function TestPronunciationPage() {
       const mediaRecorder = new MediaRecorder(stream, {
         mimeType: 'audio/webm;codecs=opus'
       })
+      mediaRecorderRef.current = mediaRecorder
       const chunks: Blob[] = []
 
       mediaRecorder.ondataavailable = (event) => {
@@ -56,9 +59,8 @@ export default function TestPronunciationPage() {
 
       // 5秒後に自動停止
       setTimeout(() => {
-        if (mediaRecorder.state === 'recording') {
-          mediaRecorder.stop()
-          setIsRecording(false)
+        if (mediaRecorderRef.current?.state === 'recording') {
+          mediaRecorderRef.current.stop()
         }
       }, 5000)
     } catch (err) {
@@ -68,7 +70,9 @@ export default function TestPronunciationPage() {
   }
 
   const stopRecording = () => {
-    setIsRecording(false)
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+      mediaRecorderRef.current.stop()
+    }
   }
 
   const evaluatePronunciation = async () => {
@@ -109,7 +113,7 @@ export default function TestPronunciationPage() {
   const convertToWav = async (blob: Blob): Promise<Blob> => {
     try {
       // Web Audio APIを使用してWAV形式に変換
-      const audioContext = new (window as any).AudioContext()
+      const audioContext = new (window as any).AudioContext({ sampleRate: 16000 })
       const arrayBuffer = await blob.arrayBuffer()
       const audioBuffer = await audioContext.decodeAudioData(arrayBuffer)
       
@@ -151,13 +155,15 @@ export default function TestPronunciationPage() {
     writeString(36, 'data')
     view.setUint32(40, length * numberOfChannels * 2, true)
     
-    // 音声データ
-    const channelData = audioBuffer.getChannelData(0)
+    // 音声データ (マルチチャンネル対応)
     let offset = 44
     for (let i = 0; i < length; i++) {
-      const sample = Math.max(-1, Math.min(1, channelData[i]))
-      view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7FFF, true)
-      offset += 2
+      for (let channel = 0; channel < numberOfChannels; channel++) {
+        const channelData = audioBuffer.getChannelData(channel)
+        const sample = Math.max(-1, Math.min(1, channelData[i]))
+        view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7FFF, true)
+        offset += 2
+      }
     }
     
     return new Blob([arrayBuffer], { type: 'audio/wav' })
