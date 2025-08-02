@@ -1,0 +1,280 @@
+"use client"
+
+import { useState, useRef, useEffect } from "react"
+import { Button } from "@/components/ui/button"
+import { Card } from "@/components/ui/card"
+import { Mic, Square, SkipForward, CheckCircle, XCircle } from "lucide-react"
+
+interface AISpeakingPracticeProps {
+  targetText: string
+  targetMeaning: string | undefined
+  onComplete: (score: number) => void
+  onIncorrect: () => void
+  onNextQuestion: () => void
+}
+
+interface EvaluationResult {
+  pronunciationScore: number;
+  grade: 'A' | 'B' | 'C' | 'D' | 'E';
+  isPass: boolean;
+  advice: string[];
+  recognizedText: string;
+}
+
+export function AISpeakingPractice({
+  targetText,
+  targetMeaning,
+  onComplete,
+  onIncorrect,
+  onNextQuestion
+}: AISpeakingPracticeProps) {
+  const [isRecording, setIsRecording] = useState(false)
+  const [isProcessing, setIsProcessing] = useState(false)
+  const [evaluationResult, setEvaluationResult] = useState<EvaluationResult | null>(null)
+  const mediaRecorder = useRef<MediaRecorder | null>(null)
+  const audioChunks = useRef<Blob[]>([])
+  const recorderMimeType = useRef<string>('')
+
+  // Reset component state when the phrase changes
+  useEffect(() => {
+    setEvaluationResult(null);
+    setIsProcessing(false);
+    setIsRecording(false);
+  }, [targetText]);
+
+  const audioBufferToWav = (buffer: AudioBuffer): Blob => {
+    const numOfChan = buffer.numberOfChannels
+    const length = buffer.length * numOfChan * 2 + 44
+    const wavBuffer = new ArrayBuffer(length)
+    const view = new DataView(wavBuffer)
+    const channels = []
+    let i, sample
+    let offset = 0
+    let pos = 0
+
+    const setUint16 = (data: number) => {
+      view.setUint16(pos, data, true)
+      pos += 2
+    }
+    const setUint32 = (data: number) => {
+      view.setUint32(pos, data, true)
+      pos += 4
+    }
+
+    // Write WAVE header
+    setUint32(0x46464952) // "RIFF"
+    setUint32(length - 8) // file length - 8
+    setUint32(0x45564157) // "WAVE"
+
+    // Write "fmt " sub-chunk
+    setUint32(0x20746d66) // "fmt "
+    setUint32(16) // chunk size
+    setUint16(1) // audio format 1 (PCM)
+    setUint16(numOfChan)
+    setUint32(buffer.sampleRate)
+    setUint32(buffer.sampleRate * 2 * numOfChan) // byte rate
+    setUint16(numOfChan * 2) // block align
+    setUint16(16) // bits per sample
+
+    // Write "data" sub-chunk
+    setUint32(0x61746164) // "data"
+    setUint32(length - pos - 4)
+
+    // Get PCM data
+    for (i = 0; i < buffer.numberOfChannels; i++) {
+      channels.push(buffer.getChannelData(i))
+    }
+
+    // Write PCM samples
+    while (pos < length) {
+      for (i = 0; i < numOfChan; i++) {
+        sample = Math.max(-1, Math.min(1, channels[i][offset])) // clamp
+        sample = sample < 0 ? sample * 0x8000 : sample * 0x7fff // scale to 16-bit
+        view.setInt16(pos, sample, true)
+        pos += 2
+      }
+      offset++
+    }
+
+    return new Blob([view], { type: 'audio/wav' })
+  }
+
+  const convertToWav = async (blob: Blob): Promise<Blob> => {
+    const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 })
+    const arrayBuffer = await blob.arrayBuffer()
+
+    if (arrayBuffer.byteLength === 0) {
+      throw new Error("Cannot process empty audio file.")
+    }
+
+    const audioBuffer = await audioContext.decodeAudioData(arrayBuffer)
+    if (audioBuffer.length === 0) {
+      throw new Error("Decoded audio buffer is empty.")
+    }
+    return audioBufferToWav(audioBuffer)
+  }
+
+  const startRecording = async () => {
+    setEvaluationResult(null)
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { sampleRate: 16000, channelCount: 1 }
+      })
+
+      // Find a supported MIME type
+      const mimeTypes = ['audio/webm;codecs=opus', 'audio/ogg;codecs=opus', 'audio/webm'];
+      const supportedMimeType = mimeTypes.find(type => MediaRecorder.isTypeSupported(type));
+
+      if (!supportedMimeType) {
+        alert("お使いのブラウザは音声録音に対応していません。");
+        return;
+      }
+      recorderMimeType.current = supportedMimeType;
+      console.log(`[Recording] Using supported MIME type: ${recorderMimeType.current}`);
+
+      const recorder = new MediaRecorder(stream, { mimeType: recorderMimeType.current })
+      mediaRecorder.current = recorder
+      audioChunks.current = []
+      recorder.ondataavailable = (event) => audioChunks.current.push(event.data)
+      recorder.onstop = processSpeech
+      recorder.start()
+      setIsRecording(true)
+    } catch (error) {
+      console.error("Microphone access error:", error)
+      alert("マイクへのアクセスを許可してください。")
+    }
+  }
+
+  const stopRecording = () => {
+    if (mediaRecorder.current && mediaRecorder.current.state === "recording") {
+      mediaRecorder.current.stop()
+      mediaRecorder.current.stream.getTracks().forEach(track => track.stop())
+      setIsRecording(false)
+      setIsProcessing(true)
+    }
+  }
+
+  const processSpeech = async () => {
+    if (audioChunks.current.length === 0) {
+      setIsProcessing(false)
+      return
+    }
+
+    try {
+      const audioBlob = new Blob(audioChunks.current, { type: recorderMimeType.current })
+      console.log(`[Speech Processing] Created audioBlob with size: ${audioBlob.size}`);
+
+      if (audioBlob.size < 500) { // Check for a minimal size (500 bytes)
+        console.error("[Speech Processing] Recorded audio blob is too small. Probably silence.");
+        alert("録音された音声が短すぎるか、無音です。もう一度お試しください。");
+        setIsProcessing(false);
+        onIncorrect();
+        return;
+      }
+      
+      const wavBlob = await convertToWav(audioBlob)
+
+      const formData = new FormData()
+      formData.append("audio", wavBlob, "recording.wav")
+      formData.append("referenceText", targetText)
+      
+      const response = await fetch("/api/speech-evaluation", {
+        method: "POST",
+        body: formData,
+      })
+      const result = await response.json()
+
+      if (response.ok) {
+        setEvaluationResult(result)
+        // The onComplete callback is now only responsible for marking the phrase as complete.
+        // The user explicitly clicks "Next" or "Retry" to proceed.
+        if (result.isPass) {
+          onComplete(result.pronunciationScore)
+        } else {
+          onIncorrect()
+        }
+      } else {
+        throw new Error(result.error || "Evaluation failed")
+      }
+
+    } catch (error) {
+      console.error("Evaluation processing error:", error)
+      alert("音声の処理に失敗しました。もう一度お試しください。")
+      setEvaluationResult(null) // Clear any previous results
+      onIncorrect()
+    } finally {
+      setIsProcessing(false)
+    }
+  }
+  
+  // This function is called when the user wants to try the same question again
+  const handleRetry = () => {
+    setEvaluationResult(null);
+    setIsProcessing(false);
+    setIsRecording(false);
+    onIncorrect(); // This will keep the user on the same question
+  }
+
+  if (evaluationResult) {
+    const { grade, isPass, advice, pronunciationScore } = evaluationResult;
+    return (
+      <Card className={`p-6 text-center space-y-4 rounded-2xl ${isPass ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+        <div className="flex items-center justify-center gap-4">
+           <h3 className={`text-6xl font-bold ${isPass ? 'text-green-500' : 'text-red-500'}`}>{grade}</h3>
+           <div>
+              <p className={`px-4 py-1 rounded-full text-lg font-semibold ${isPass ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                {isPass ? '合格' : '不合格'}
+              </p>
+              {/* <p className="text-sm text-slate-500 mt-1">スコア: {pronunciationScore}</p> */}
+           </div>
+        </div>
+
+        <div className="text-left bg-white p-4 rounded-lg space-y-2">
+            <h4 className="font-bold text-slate-700">改善アドバイス</h4>
+            <ul className="list-disc list-inside text-slate-600 space-y-1">
+                {advice.map((item, index) => <li key={index} className="text-sm">{item}</li>)}
+            </ul>
+        </div>
+        
+        <div className="flex flex-col space-y-3 pt-2">
+            <Button onClick={onNextQuestion} size="lg">
+                次へ
+            </Button>
+            {!isPass && (
+                <Button onClick={handleRetry} variant="outline" size="lg">
+                    再挑戦
+                </Button>
+            )}
+        </div>
+      </Card>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col items-center space-y-6">
+        <Button
+          onClick={isRecording ? stopRecording : startRecording}
+          disabled={isProcessing}
+          size="lg"
+          className={`w-32 h-32 rounded-full text-white ${isRecording ? 'bg-red-500' : 'bg-blue-500'}`}
+        >
+          {isProcessing ? (
+            <span
+              className="text-base font-semibold whitespace-nowrap"
+              style={{ fontSize: '1.1rem', letterSpacing: '0.05em' }}
+            >
+              評価中...
+            </span>
+          ) : (
+            isRecording ? <Square className="w-12 h-12" /> : <Mic className="w-12 h-12" />
+          )}
+        </Button>
+        <Button variant="outline" onClick={onNextQuestion} disabled={isProcessing}>
+          <SkipForward className="w-4 h-4 mr-2" />
+          スキップ
+        </Button>
+      </div>
+    </div>
+  )
+} 

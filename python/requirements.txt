@@ -1,0 +1,6 @@
+# Python dependencies for audio analysis
+librosa
+dtw-python
+numpy
+scipy
+soundfile 

@@ -1,0 +1,14 @@
+# Dependencies
+/node_modules
+
+# Next.js build output
+/.next/
+
+# Vercel
+.vercel/
+
+# Local environment variables
+.env.local
+
+# macOS folder attributes
+.DS_Store 
