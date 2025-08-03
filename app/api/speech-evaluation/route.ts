@@ -114,7 +114,7 @@ export async function POST(request: NextRequest) {
     const azureResult = await getAzurePronunciationAssessment(userAudioBuffer, referenceText)
     
     const nBest = azureResult?.NBest?.[0]
-    const pronunciationScore = nBest?.PronunciationAssessment?.PronScore || 0
+    const pronunciationScore = nBest?.PronScore || 0
     
     console.log('Azure result structure:', {
       hasNBest: !!azureResult?.NBest,
@@ -141,9 +141,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       pronunciationScore: pronunciationScore,
-      accuracyScore: nBest?.PronunciationAssessment?.AccuracyScore || 0,
-      fluencyScore: nBest?.PronunciationAssessment?.FluencyScore || 0,
-      completenessScore: nBest?.PronunciationAssessment?.CompletenessScore || 0,
+      accuracyScore: nBest?.AccuracyScore || 0,
+      fluencyScore: nBest?.FluencyScore || 0,
+      completenessScore: nBest?.CompletenessScore || 0,
       grade: grade,
       isPass: isPass,
       advice: advice,
