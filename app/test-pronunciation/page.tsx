@@ -258,8 +258,8 @@ export default function TestPronunciationPage() {
             {evaluation ? (
               <div className="space-y-4">
                 <div className="flex items-center gap-4">
-                  <Badge className={`text-white ${getGradeColor(evaluation.grade)}`}>
-                    {evaluation.grade}
+                  <Badge className={`text-white ${getGradeColor(evaluation.overallGrade)}`}>
+                    {evaluation.overallGrade}
                   </Badge>
                   <span className="text-lg font-semibold">
                     {evaluation.pronunciationScore}/100点
@@ -295,14 +295,32 @@ export default function TestPronunciationPage() {
                     </div>
                   </div>
 
-                  {evaluation.advice && evaluation.advice.length > 0 && (
+                  {evaluation.improvements && evaluation.improvements.length > 0 && (
                     <div>
-                      <label className="text-sm font-medium">アドバイス:</label>
+                      <label className="text-sm font-medium">改善点:</label>
                       <ul className="list-disc list-inside text-sm text-gray-700">
-                        {evaluation.advice.map((item: string, index: number) => (
-                          <li key={index}>{item}</li>
+                        {evaluation.improvements.map((improvement: string, index: number) => (
+                          <li key={index}>{improvement}</li>
                         ))}
                       </ul>
+                    </div>
+                  )}
+
+                  {evaluation.positives && evaluation.positives.length > 0 && (
+                    <div>
+                      <label className="text-sm font-medium">良い点:</label>
+                      <ul className="list-disc list-inside text-sm text-gray-700">
+                        {evaluation.positives.map((positive: string, index: number) => (
+                          <li key={index}>{positive}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {evaluation.feedback && (
+                    <div>
+                      <label className="text-sm font-medium">フィードバック:</label>
+                      <p className="text-sm text-gray-700">{evaluation.feedback}</p>
                     </div>
                   )}
                 </div>
