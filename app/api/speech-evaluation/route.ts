@@ -8,13 +8,17 @@ async function getAzurePronunciationAssessment(audioBuffer: Buffer, referenceTex
     throw new Error('Azure Speech credentials are not configured in environment variables.')
   }
 
+  // 正しい発音評価エンドポイント
   const url = `https://${AZURE_SPEECH_REGION}.stt.speech.microsoft.com/speech/recognition/conversation/cognitiveservices/v1?language=en-US`
+  
+  // 発音評価の設定
   const pronunciationConfig = {
     ReferenceText: referenceText,
     GradingSystem: 'HundredMark',
     Granularity: 'Phoneme',
     Dimension: 'Comprehensive',
   }
+
   const headers = {
     'Ocp-Apim-Subscription-Key': AZURE_SPEECH_KEY,
     'Content-Type': 'audio/wav',
@@ -22,13 +26,31 @@ async function getAzurePronunciationAssessment(audioBuffer: Buffer, referenceTex
     'Pronunciation-Assessment': Buffer.from(JSON.stringify(pronunciationConfig)).toString('base64'),
   }
 
-  const response = await fetch(url, { method: 'POST', headers, body: audioBuffer })
+  console.log('Sending request to Azure Speech Service...')
+  console.log('URL:', url)
+  console.log('Headers:', { ...headers, 'Ocp-Apim-Subscription-Key': '***' })
+  console.log('Audio buffer size:', audioBuffer.length)
+
+  const response = await fetch(url, { 
+    method: 'POST', 
+    headers, 
+    body: audioBuffer 
+  })
+
   if (!response.ok) {
     const errorText = await response.text()
-    console.error("Azure Error:", errorText)
+    console.error("Azure Error Response:", {
+      status: response.status,
+      statusText: response.statusText,
+      headers: Object.fromEntries(response.headers.entries()),
+      body: errorText
+    })
     throw new Error(`Azure pronunciation assessment failed. Status: ${response.status}, Message: ${errorText}`)
   }
-  return response.json()
+
+  const result = await response.json()
+  console.log('Azure Response:', JSON.stringify(result, null, 2))
+  return result
 }
 
 function getGradeFromScore(score: number): 'A' | 'B' | 'C' | 'D' | 'E' {
@@ -78,26 +100,28 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing audio file or reference text.' }, { status: 400 })
     }
 
+    console.log('Received audio file:', {
+      name: audioFile.name,
+      size: audioFile.size,
+      type: audioFile.type
+    })
+    console.log('Reference text:', referenceText)
+
     const userAudioBuffer = Buffer.from(await audioFile.arrayBuffer())
+    console.log('Converted to buffer, size:', userAudioBuffer.length)
 
     console.log('1. 🔬 Running Azure pronunciation assessment...')
     const azureResult = await getAzurePronunciationAssessment(userAudioBuffer, referenceText)
     
-    // Log the full Azure response for debugging
-    console.log('   ☁️ Full Azure Response:', JSON.stringify(azureResult, null, 2))
-
-    // Handle cases where recognition fails
-    if (azureResult.RecognitionStatus !== 'Success') {
-      console.warn(`   ⚠️ Azure recognition failed with status: ${azureResult.RecognitionStatus}`)
-      if (azureResult.RecognitionStatus === 'NoMatch') {
-         throw new Error("音声が認識できませんでした。はっきりと発音してください。")
-      }
-      throw new Error(`Azure recognition failed: ${azureResult.RecognitionStatus}`)
-    }
-
     const nBest = azureResult?.NBest?.[0]
-    // FIX: Correctly access the score from the NBest object directly.
-    const pronunciationScore = nBest?.PronScore || 0
+    const pronunciationScore = nBest?.PronunciationAssessment?.PronScore || 0
+    
+    console.log('Azure result structure:', {
+      hasNBest: !!azureResult?.NBest,
+      nBestLength: azureResult?.NBest?.length,
+      firstNBest: nBest,
+      pronunciationScore
+    })
     
     if (nBest) {
         console.log(`   ☁️ Azure Result: SUCCESS | Score: ${pronunciationScore}`)
@@ -117,10 +141,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       pronunciationScore: pronunciationScore,
-      // FIX: Correctly access scores from the NBest object.
-      accuracyScore: nBest?.AccuracyScore,
-      fluencyScore: nBest?.FluencyScore,
-      completenessScore: nBest?.CompletenessScore,
+      accuracyScore: nBest?.PronunciationAssessment?.AccuracyScore || 0,
+      fluencyScore: nBest?.PronunciationAssessment?.FluencyScore || 0,
+      completenessScore: nBest?.PronunciationAssessment?.CompletenessScore || 0,
       grade: grade,
       isPass: isPass,
       advice: advice,
