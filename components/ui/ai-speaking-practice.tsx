@@ -258,14 +258,14 @@ export function AISpeakingPractice({
               <AlertDialogTitle className={`text-2xl font-bold ${evaluationResult.isPass ? 'text-green-500' : 'text-red-500'}`}>
                 {evaluationResult.isPass ? '合格！' : 'もう一回！'} ({evaluationResult.grade})
               </AlertDialogTitle>
-              <div className="text-left bg-white rounded-lg space-y-2 pt-4">
-                  <h4 className="font-bold text-slate-700">改善アドバイス</h4>
-                  <AlertDialogDescription>
+              <AlertDialogDescription asChild>
+                <div className="text-left space-y-2 pt-4">
+                    <h4 className="font-bold text-slate-700">改善アドバイス</h4>
                     <ul className="list-disc list-inside text-slate-600 space-y-1">
                         {evaluationResult.advice.map((item, index) => <li key={index} className="text-sm">{item}</li>)}
                     </ul>
-                  </AlertDialogDescription>
-              </div>
+                </div>
+              </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
               {!evaluationResult.isPass && (
