@@ -6,7 +6,7 @@ import os from 'os'
 
 // Azure Speech Service configuration with validation
 const AZURE_SPEECH_KEY = process.env.AZURE_SPEECH_KEY || ''
-const AZURE_SPEECH_REGION = process.env.AZURE_SPEECH_REGION || ''
+const AZURE_SPEECH_REGION = process.env.AZURE_SPEECH_REGION || 'japanwest'
 
 // Environment variable validation for Vercel deployment
 if (!AZURE_SPEECH_KEY) {
@@ -57,25 +57,6 @@ export async function POST(request: NextRequest) {
   try {
     console.log('=== ADVANCED PRONUNCIATION ASSESSMENT API CALLED ===')
     
-    // Vercel deployment: Check environment variables
-    if (!AZURE_SPEECH_KEY) {
-      console.log('=== AZURE KEY NOT CONFIGURED - RETURNING DEMO RESULT ===')
-      const demoResult = {
-        overallGrade: 'B' as const,
-        gradeDescription: '良好 - 非常に理解しやすい発音',
-        pronunciationScore: 85,
-        accuracyScore: 82,
-        fluencyScore: 88,
-        completenessScore: 85,
-        recognizedText: 'Demo recognition result',
-        improvements: ['発音の正確性を向上させてください'],
-        positives: ['理解しやすい発音でした'],
-        feedback: 'デモ評価: 良好な発音です！',
-        isPass: true
-      }
-      return NextResponse.json(demoResult)
-    }
-    
     const formData = await request.formData()
     const audioFile = formData.get('audio') as File
     const referenceText = formData.get('referenceText') as string
@@ -87,6 +68,8 @@ export async function POST(request: NextRequest) {
     console.log('=== REQUEST DETAILS ===')
     console.log(`Audio file: ${audioFile.name} size: ${audioFile.size} type: ${audioFile.type}`)
     console.log(`Reference text: ${referenceText}`)
+    console.log(`Azure key (first 10 chars): ${AZURE_SPEECH_KEY.substring(0, 10)}...`)
+    console.log(`Azure region: ${AZURE_SPEECH_REGION}`)
 
     const audioBuffer = await audioFile.arrayBuffer()
     console.log('=== CALLING AZURE SPEECH SERVICE ===')
