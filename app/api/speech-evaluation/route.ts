@@ -84,10 +84,18 @@ export async function POST(request: NextRequest) {
       // Azure Speech Service の正しい発音評価実装
       const azureResult = await performPronunciationAssessment(audioBuffer, referenceText)
       
-      // 高度なPython分析を実行
+      // 高度なPython分析を実行（エラーハンドリング付き）
       console.log('=== RUNNING ADVANCED PYTHON ANALYSIS ===')
-      const advancedResult = await runAdvancedAnalysis(tempAudioPath, referenceText)
-      console.log('Advanced analysis result:', JSON.stringify(advancedResult, null, 2))
+      let advancedResult = null
+      try {
+        advancedResult = await runAdvancedAnalysis(tempAudioPath, referenceText)
+        console.log('Advanced analysis result:', JSON.stringify(advancedResult, null, 2))
+      } catch (pythonError) {
+        console.log('=== PYTHON ANALYSIS FAILED - USING AZURE ONLY ===')
+        console.error('Python analysis error:', pythonError)
+        // Python分析が失敗してもAzureの結果を返す
+        return NextResponse.json(azureResult)
+      }
       
       // 結果を統合
       const combinedResult = combineResults(azureResult, advancedResult)
@@ -589,7 +597,7 @@ function combineResults(azureResult: PronunciationAssessmentResult, advancedResu
   const combined = { ...azureResult }
   
   // 高度な分析結果を追加
-  if (advancedResult.success) {
+  if (advancedResult && advancedResult.success) {
     combined.advancedAnalysis = advancedResult
     
     // 高度な分析のスコアを考慮して総合スコアを調整
