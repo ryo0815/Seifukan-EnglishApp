@@ -15,10 +15,15 @@ interface AISpeakingPracticeProps {
 
 interface EvaluationResult {
   pronunciationScore: number;
-  grade: 'A' | 'B' | 'C' | 'D' | 'E';
+  overallGrade: 'A' | 'B' | 'C' | 'D' | 'E';
   isPass: boolean;
-  advice: string[];
+  improvements: string[];
+  positives: string[];
+  feedback: string;
   recognizedText: string;
+  accuracyScore: number;
+  fluencyScore: number;
+  completenessScore: number;
 }
 
 export function AISpeakingPractice({
@@ -188,7 +193,8 @@ export function AISpeakingPractice({
         setEvaluationResult(result)
         // The onComplete callback is now only responsible for marking the phrase as complete.
         // The user explicitly clicks "Next" or "Retry" to proceed.
-        if (result.isPass) {
+        const isPass = result.overallGrade === 'A' || result.overallGrade === 'B'
+        if (isPass) {
           onComplete(result.pronunciationScore)
         } else {
           onIncorrect()
@@ -216,11 +222,11 @@ export function AISpeakingPractice({
   }
 
   if (evaluationResult) {
-    const { grade, isPass, advice, pronunciationScore } = evaluationResult;
+    const { overallGrade, isPass, improvements, pronunciationScore } = evaluationResult;
     return (
       <Card className={`p-6 text-center space-y-4 rounded-2xl ${isPass ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
         <div className="flex items-center justify-center gap-4">
-           <h3 className={`text-6xl font-bold ${isPass ? 'text-green-500' : 'text-red-500'}`}>{grade}</h3>
+           <h3 className={`text-6xl font-bold ${isPass ? 'text-green-500' : 'text-red-500'}`}>{overallGrade}</h3>
            <div>
               <p className={`px-4 py-1 rounded-full text-lg font-semibold ${isPass ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
                 {isPass ? '合格' : '不合格'}
@@ -232,7 +238,11 @@ export function AISpeakingPractice({
         <div className="text-left bg-white p-4 rounded-lg space-y-2">
             <h4 className="font-bold text-slate-700">改善アドバイス</h4>
             <ul className="list-disc list-inside text-slate-600 space-y-1">
-                {advice.map((item, index) => <li key={index} className="text-sm">{item}</li>)}
+                {improvements && improvements.length > 0 ? (
+                  improvements.map((item, index) => <li key={index} className="text-sm">{item}</li>)
+                ) : (
+                  <li className="text-sm text-slate-500">評価データがありません</li>
+                )}
             </ul>
         </div>
         
