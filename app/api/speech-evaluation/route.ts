@@ -20,6 +20,7 @@ interface PronunciationAssessmentResult {
   improvements: string[]
   positives: string[]
   feedback: string
+  isPass: boolean
   error?: string
   azureData?: any
 }
@@ -392,6 +393,7 @@ function processPronunciationAssessmentResponse(
       improvements,
       positives,
       feedback,
+      isPass: finalPronScore >= 70, // スコアに基づいて合格/不合格を判定
       azureData: data
     }
   } catch (error) {
@@ -432,7 +434,8 @@ function createResultFromSpeechToText(
     recognizedText,
     improvements,
     positives,
-    feedback: `音声認識結果: "${recognizedText}". 簡易評価スコア: ${score}/100`
+    feedback: `音声認識結果: "${recognizedText}". 簡易評価スコア: ${score}/100`,
+    isPass: grade === 'A' || grade === 'B'
   }
 }
 
@@ -538,6 +541,7 @@ function createDemoResult(error: Error): PronunciationAssessmentResult {
     improvements: ['発音の正確性を向上させてください'],
     positives: ['理解しやすい発音でした'],
     feedback: 'デモ評価: Azure Speech Service接続に問題がありましたが、発音練習を続けてください！',
-    error: error.message
+    error: error.message,
+    isPass: false
   }
 }
