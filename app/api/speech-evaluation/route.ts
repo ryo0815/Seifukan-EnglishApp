@@ -83,6 +83,18 @@ export async function POST(request: NextRequest) {
     console.log('1. 🔬 Running Azure pronunciation assessment...')
     const azureResult = await getAzurePronunciationAssessment(userAudioBuffer, referenceText)
     
+    // Log the full Azure response for debugging
+    console.log('   ☁️ Full Azure Response:', JSON.stringify(azureResult, null, 2))
+
+    // Handle cases where recognition fails
+    if (azureResult.RecognitionStatus !== 'Success') {
+      console.warn(`   ⚠️ Azure recognition failed with status: ${azureResult.RecognitionStatus}`)
+      if (azureResult.RecognitionStatus === 'NoMatch') {
+         throw new Error("音声が認識できませんでした。はっきりと発音してください。")
+      }
+      throw new Error(`Azure recognition failed: ${azureResult.RecognitionStatus}`)
+    }
+
     const nBest = azureResult?.NBest?.[0]
     const pronunciationScore = nBest?.PronunciationAssessment?.PronScore || 0
     

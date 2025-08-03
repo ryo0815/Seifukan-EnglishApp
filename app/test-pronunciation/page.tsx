@@ -77,6 +77,12 @@ export default function TestPronunciationPage() {
   const evaluatePronunciation = async () => {
     if (!audioData) return
 
+    // Add a check for audio data size
+    if (audioData.size < 1024) { // 1KB threshold
+      setError("録音データが短すぎます。もう一度録音してください。")
+      return
+    }
+
     setIsEvaluating(true)
     setError(null)
 
