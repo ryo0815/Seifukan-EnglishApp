@@ -96,7 +96,8 @@ export async function POST(request: NextRequest) {
     }
 
     const nBest = azureResult?.NBest?.[0]
-    const pronunciationScore = nBest?.PronunciationAssessment?.PronScore || 0
+    // FIX: Correctly access the score from the NBest object directly.
+    const pronunciationScore = nBest?.PronScore || 0
     
     if (nBest) {
         console.log(`   ☁️ Azure Result: SUCCESS | Score: ${pronunciationScore}`)
@@ -116,9 +117,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       pronunciationScore: pronunciationScore,
-      accuracyScore: nBest?.PronunciationAssessment?.AccuracyScore,
-      fluencyScore: nBest?.PronunciationAssessment?.FluencyScore,
-      completenessScore: nBest?.PronunciationAssessment?.CompletenessScore,
+      // FIX: Correctly access scores from the NBest object.
+      accuracyScore: nBest?.AccuracyScore,
+      fluencyScore: nBest?.FluencyScore,
+      completenessScore: nBest?.CompletenessScore,
       grade: grade,
       isPass: isPass,
       advice: advice,
