@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useRef, useEffect } from "react"
-import { Button } from "@/components/ui/button"
+import { Button } from "./button"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -11,7 +11,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
+} from "./alert-dialog"
 import { Mic, Square, SkipForward } from "lucide-react"
 
 interface AISpeakingPracticeProps {
@@ -258,14 +258,14 @@ export function AISpeakingPractice({
               <AlertDialogTitle className={`text-2xl font-bold ${evaluationResult.isPass ? 'text-green-500' : 'text-red-500'}`}>
                 {evaluationResult.isPass ? '合格！' : 'もう一回！'} ({evaluationResult.grade})
               </AlertDialogTitle>
-              <AlertDialogDescription>
-                <div className="text-left bg-white p-4 rounded-lg space-y-2 mt-4">
+              <div className="text-left bg-white rounded-lg space-y-2 pt-4">
                   <h4 className="font-bold text-slate-700">改善アドバイス</h4>
-                  <ul className="list-disc list-inside text-slate-600 space-y-1">
-                      {evaluationResult.advice.map((item, index) => <li key={index} className="text-sm">{item}</li>)}
-                  </ul>
-                </div>
-              </AlertDialogDescription>
+                  <AlertDialogDescription>
+                    <ul className="list-disc list-inside text-slate-600 space-y-1">
+                        {evaluationResult.advice.map((item, index) => <li key={index} className="text-sm">{item}</li>)}
+                    </ul>
+                  </AlertDialogDescription>
+              </div>
             </AlertDialogHeader>
             <AlertDialogFooter>
               {!evaluationResult.isPass && (
