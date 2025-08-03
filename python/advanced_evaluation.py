@@ -19,20 +19,36 @@ def analyze_pronunciation(audio_path: str, reference_text: str) -> Dict:
         duration = len(y) / sr
         energy = np.mean(librosa.feature.rms(y=y))
         
-        # フォルマント分析（母音の特徴）
-        formants = extract_formants(y, sr)
+        # 各分析を個別に実行してエラーをキャッチ
+        try:
+            formants = extract_formants(y, sr)
+        except Exception as e:
+            print(f"Formant analysis error: {e}", file=sys.stderr)
+            formants = {"f1_mean": 0, "f2_mean": 0, "f3_mean": 0, "formant_stability": 0, "score": 0}
         
-        # ピッチ分析（イントネーション）
-        pitch_contour = extract_pitch_contour(y, sr)
+        try:
+            pitch_contour = extract_pitch_contour(y, sr)
+        except Exception as e:
+            print(f"Pitch analysis error: {e}", file=sys.stderr)
+            pitch_contour = {"mean_pitch": 0, "pitch_std": 0, "pitch_range": 0, "pitch_smoothness": 0, "score": 0}
         
-        # リズム分析
-        rhythm_features = analyze_rhythm(y, sr)
+        try:
+            rhythm_features = analyze_rhythm(y, sr)
+        except Exception as e:
+            print(f"Rhythm analysis error: {e}", file=sys.stderr)
+            rhythm_features = {"tempo": 0, "beat_count": 0, "onset_count": 0, "rhythm_consistency": 0, "stress_pattern": "flat", "score": 0}
         
-        # 音素境界検出
-        phoneme_boundaries = detect_phoneme_boundaries(y, sr)
+        try:
+            phoneme_boundaries = detect_phoneme_boundaries(y, sr)
+        except Exception as e:
+            print(f"Phoneme analysis error: {e}", file=sys.stderr)
+            phoneme_boundaries = {"boundary_count": 0, "boundary_quality": 0, "change_intensity": 0, "score": 0}
         
-        # カタカナ発音検出
-        katakana_score = detect_katakana_pronunciation(y, sr)
+        try:
+            katakana_score = detect_katakana_pronunciation(y, sr)
+        except Exception as e:
+            print(f"Katakana detection error: {e}", file=sys.stderr)
+            katakana_score = {"detected": False, "confidence": 0, "indicators": [], "score": 0}
         
         # 総合スコア計算
         overall_score = calculate_overall_score(
@@ -84,27 +100,29 @@ def extract_formants(y: np.ndarray, sr: int) -> Dict:
                 formant_freqs.append(peaks[:3].tolist())
     
     # フォルマント統計
-    if formant_freqs:
+    if formant_freqs and len(formant_freqs) > 0:
         formant_freqs = np.array(formant_freqs)
-        f1_mean = np.mean(formant_freqs[:, 0]) if len(formant_freqs) > 0 else 0
-        f2_mean = np.mean(formant_freqs[:, 1]) if len(formant_freqs) > 0 else 0
-        f3_mean = np.mean(formant_freqs[:, 2]) if len(formant_freqs) > 0 else 0
-        
-        return {
-            "f1_mean": float(f1_mean),
-            "f2_mean": float(f2_mean),
-            "f3_mean": float(f3_mean),
-            "formant_stability": float(np.std(formant_freqs)),
-            "score": calculate_formant_score(f1_mean, f2_mean, f3_mean)
-        }
-    else:
-        return {
-            "f1_mean": 0,
-            "f2_mean": 0,
-            "f3_mean": 0,
-            "formant_stability": 0,
-            "score": 0
-        }
+        if formant_freqs.shape[1] >= 3:  # 3つのフォルマントがあることを確認
+            f1_mean = np.mean(formant_freqs[:, 0]) if len(formant_freqs) > 0 else 0
+            f2_mean = np.mean(formant_freqs[:, 1]) if len(formant_freqs) > 0 else 0
+            f3_mean = np.mean(formant_freqs[:, 2]) if len(formant_freqs) > 0 else 0
+            
+            return {
+                "f1_mean": float(f1_mean),
+                "f2_mean": float(f2_mean),
+                "f3_mean": float(f3_mean),
+                "formant_stability": float(np.std(formant_freqs)),
+                "score": calculate_formant_score(f1_mean, f2_mean, f3_mean)
+            }
+    
+    # フォルマントが見つからない場合のデフォルト値
+    return {
+        "f1_mean": 0,
+        "f2_mean": 0,
+        "f3_mean": 0,
+        "formant_stability": 0,
+        "score": 0
+    }
 
 def extract_pitch_contour(y: np.ndarray, sr: int) -> Dict:
     """
