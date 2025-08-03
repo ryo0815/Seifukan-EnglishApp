@@ -1,0 +1,408 @@
+import librosa
+import numpy as np
+import scipy.signal as signal
+from scipy.spatial.distance import cosine
+import json
+import sys
+import os
+from typing import Dict, List, Tuple
+
+def analyze_pronunciation(audio_path: str, reference_text: str) -> Dict:
+    """
+    高度な音響分析による発音評価
+    """
+    try:
+        # 音声ファイルを読み込み
+        y, sr = librosa.load(audio_path, sr=16000)
+        
+        # 基本統計
+        duration = len(y) / sr
+        energy = np.mean(librosa.feature.rms(y=y))
+        
+        # フォルマント分析（母音の特徴）
+        formants = extract_formants(y, sr)
+        
+        # ピッチ分析（イントネーション）
+        pitch_contour = extract_pitch_contour(y, sr)
+        
+        # リズム分析
+        rhythm_features = analyze_rhythm(y, sr)
+        
+        # 音素境界検出
+        phoneme_boundaries = detect_phoneme_boundaries(y, sr)
+        
+        # カタカナ発音検出
+        katakana_score = detect_katakana_pronunciation(y, sr)
+        
+        # 総合スコア計算
+        overall_score = calculate_overall_score(
+            formants, pitch_contour, rhythm_features, 
+            phoneme_boundaries, katakana_score, energy
+        )
+        
+        return {
+            "success": True,
+            "overallScore": overall_score,
+            "formantAnalysis": formants,
+            "pitchAnalysis": pitch_contour,
+            "rhythmAnalysis": rhythm_features,
+            "phonemeAnalysis": phoneme_boundaries,
+            "katakanaDetection": katakana_score,
+            "energyLevel": float(energy),
+            "duration": duration,
+            "detailedFeedback": generate_detailed_feedback(
+                formants, pitch_contour, rhythm_features, 
+                phoneme_boundaries, katakana_score
+            )
+        }
+        
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+def extract_formants(y: np.ndarray, sr: int) -> Dict:
+    """
+    フォルマント分析（母音の特徴を抽出）
+    """
+    # 短時間フーリエ変換
+    stft = librosa.stft(y, n_fft=2048, hop_length=512)
+    
+    # スペクトログラム
+    spec = np.abs(stft)
+    
+    # フォルマント周波数推定
+    formant_freqs = []
+    for i in range(0, spec.shape[1], 10):  # 10フレームごとに分析
+        frame = spec[:, i]
+        if np.max(frame) > 0:
+            # ピーク検出
+            peaks, _ = signal.find_peaks(frame, height=np.max(frame)*0.1)
+            if len(peaks) >= 3:
+                # 上位3つのピークをフォルマントとして使用
+                formant_freqs.append(peaks[:3].tolist())
+    
+    # フォルマント統計
+    if formant_freqs:
+        formant_freqs = np.array(formant_freqs)
+        f1_mean = np.mean(formant_freqs[:, 0]) if len(formant_freqs) > 0 else 0
+        f2_mean = np.mean(formant_freqs[:, 1]) if len(formant_freqs) > 0 else 0
+        f3_mean = np.mean(formant_freqs[:, 2]) if len(formant_freqs) > 0 else 0
+        
+        return {
+            "f1_mean": float(f1_mean),
+            "f2_mean": float(f2_mean),
+            "f3_mean": float(f3_mean),
+            "formant_stability": float(np.std(formant_freqs)),
+            "score": calculate_formant_score(f1_mean, f2_mean, f3_mean)
+        }
+    else:
+        return {
+            "f1_mean": 0,
+            "f2_mean": 0,
+            "f3_mean": 0,
+            "formant_stability": 0,
+            "score": 0
+        }
+
+def extract_pitch_contour(y: np.ndarray, sr: int) -> Dict:
+    """
+    ピッチ軌跡分析（イントネーション評価）
+    """
+    # ピッチ抽出
+    pitches, magnitudes = librosa.piptrack(y=y, sr=sr)
+    
+    # 有効なピッチのみ抽出
+    valid_pitches = []
+    for t in range(pitches.shape[1]):
+        index = magnitudes[:, t].argmax()
+        pitch = pitches[index, t]
+        if pitch > 0:
+            valid_pitches.append(pitch)
+    
+    if valid_pitches:
+        valid_pitches = np.array(valid_pitches)
+        
+        # ピッチ統計
+        pitch_mean = np.mean(valid_pitches)
+        pitch_std = np.std(valid_pitches)
+        pitch_range = np.max(valid_pitches) - np.min(valid_pitches)
+        
+        # ピッチ変化の滑らかさ
+        pitch_smoothness = calculate_pitch_smoothness(valid_pitches)
+        
+        return {
+            "mean_pitch": float(pitch_mean),
+            "pitch_std": float(pitch_std),
+            "pitch_range": float(pitch_range),
+            "pitch_smoothness": float(pitch_smoothness),
+            "score": calculate_pitch_score(pitch_mean, pitch_std, pitch_smoothness)
+        }
+    else:
+        return {
+            "mean_pitch": 0,
+            "pitch_std": 0,
+            "pitch_range": 0,
+            "pitch_smoothness": 0,
+            "score": 0
+        }
+
+def analyze_rhythm(y: np.ndarray, sr: int) -> Dict:
+    """
+    リズム分析（音節のリズムとストレス）
+    """
+    # ビート検出
+    tempo, beats = librosa.beat.beat_track(y=y, sr=sr)
+    
+    # オンスセット検出
+    onset_frames = librosa.onset.onset_detect(y=y, sr=sr)
+    onset_times = librosa.frames_to_time(onset_frames, sr=sr)
+    
+    # リズムの一貫性
+    if len(onset_times) > 1:
+        intervals = np.diff(onset_times)
+        rhythm_consistency = 1.0 / (1.0 + np.std(intervals))
+    else:
+        rhythm_consistency = 0
+    
+    # ストレスパターン分析
+    stress_pattern = analyze_stress_pattern(y, sr)
+    
+    return {
+        "tempo": float(tempo),
+        "beat_count": len(beats),
+        "onset_count": len(onset_times),
+        "rhythm_consistency": float(rhythm_consistency),
+        "stress_pattern": stress_pattern,
+        "score": calculate_rhythm_score(tempo, rhythm_consistency, stress_pattern)
+    }
+
+def detect_phoneme_boundaries(y: np.ndarray, sr: int) -> Dict:
+    """
+    音素境界検出
+    """
+    # スペクトラル変化の検出
+    mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13)
+    
+    # MFCCの変化率
+    mfcc_diff = np.diff(mfcc, axis=1)
+    change_points = np.sum(np.abs(mfcc_diff), axis=0)
+    
+    # 変化点の検出
+    threshold = np.mean(change_points) + np.std(change_points)
+    boundaries = np.where(change_points > threshold)[0]
+    
+    # 境界の品質評価
+    boundary_quality = len(boundaries) / len(change_points) if len(change_points) > 0 else 0
+    
+    return {
+        "boundary_count": len(boundaries),
+        "boundary_quality": float(boundary_quality),
+        "change_intensity": float(np.mean(change_points)),
+        "score": calculate_boundary_score(boundary_quality, len(boundaries))
+    }
+
+def detect_katakana_pronunciation(y: np.ndarray, sr: int) -> Dict:
+    """
+    カタカナ発音検出（日本語的な発音パターン）
+    """
+    # フォルマント分析による母音の特徴
+    formants = extract_formants(y, sr)
+    
+    # ピッチ分析
+    pitch_data = extract_pitch_contour(y, sr)
+    
+    # カタカナ発音の特徴
+    # 1. 母音の長さが不自然
+    # 2. ピッチの変化が少ない
+    # 3. フォルマントの分布が日本語的
+    
+    katakana_indicators = []
+    
+    # 母音の長さ分析
+    if pitch_data["pitch_range"] < 50:  # ピッチ変化が少ない
+        katakana_indicators.append("monotone_pitch")
+    
+    # フォルマント分析
+    if formants["formant_stability"] > 100:  # フォルマントが不安定
+        katakana_indicators.append("unstable_formants")
+    
+    # リズム分析
+    rhythm_data = analyze_rhythm(y, sr)
+    if rhythm_data["rhythm_consistency"] < 0.3:  # リズムが不自然
+        katakana_indicators.append("unnatural_rhythm")
+    
+    # カタカナスコア計算
+    katakana_score = len(katakana_indicators) / 3.0  # 0-1のスコア
+    
+    return {
+        "detected": katakana_score > 0.5,
+        "confidence": float(katakana_score),
+        "indicators": katakana_indicators,
+        "score": float(1.0 - katakana_score)  # カタカナでないほど高スコア
+    }
+
+def calculate_overall_score(formants: Dict, pitch: Dict, rhythm: Dict, 
+                          phoneme: Dict, katakana: Dict, energy: float) -> float:
+    """
+    総合スコア計算
+    """
+    # 各要素の重み付け
+    formant_weight = 0.25
+    pitch_weight = 0.25
+    rhythm_weight = 0.20
+    phoneme_weight = 0.15
+    katakana_weight = 0.15
+    
+    # スコア計算
+    formant_score = formants.get("score", 0)
+    pitch_score = pitch.get("score", 0)
+    rhythm_score = rhythm.get("score", 0)
+    phoneme_score = phoneme.get("score", 0)
+    katakana_score = katakana.get("score", 0)
+    
+    # エネルギー補正
+    energy_factor = min(energy * 10, 1.0)  # エネルギーが低すぎると減点
+    
+    # 総合スコア
+    overall_score = (
+        formant_score * formant_weight +
+        pitch_score * pitch_weight +
+        rhythm_score * rhythm_weight +
+        phoneme_score * phoneme_weight +
+        katakana_score * katakana_weight
+    ) * energy_factor
+    
+    return float(np.clip(overall_score * 100, 0, 100))
+
+def calculate_formant_score(f1: float, f2: float, f3: float) -> float:
+    """フォルマントスコア計算"""
+    # 英語の母音の典型的なフォルマント範囲
+    english_vowel_ranges = [
+        (300, 800, 2000, 3000),   # /i/
+        (400, 900, 1800, 2800),   # /ɪ/
+        (500, 1000, 1600, 2600),  # /e/
+        (600, 1200, 1400, 2400),  # /æ/
+        (700, 1100, 1200, 2200),  # /ɑ/
+        (400, 800, 1200, 2000),   # /ʌ/
+        (300, 700, 1000, 1800),   # /u/
+        (400, 800, 1100, 1900),   # /ʊ/
+    ]
+    
+    best_score = 0
+    for f1_range, f2_range, f3_range, _ in english_vowel_ranges:
+        score = 0
+        if f1_range[0] <= f1 <= f1_range[1]:
+            score += 0.4
+        if f2_range[0] <= f2 <= f2_range[1]:
+            score += 0.4
+        if f3_range[0] <= f3 <= f3_range[1]:
+            score += 0.2
+        best_score = max(best_score, score)
+    
+    return best_score
+
+def calculate_pitch_score(mean_pitch: float, pitch_std: float, smoothness: float) -> float:
+    """ピッチスコア計算"""
+    # 適切なピッチ範囲（100-400Hz）
+    pitch_score = 0
+    if 100 <= mean_pitch <= 400:
+        pitch_score += 0.4
+    elif 80 <= mean_pitch <= 500:
+        pitch_score += 0.2
+    
+    # ピッチ変化の適切さ
+    if 20 <= pitch_std <= 100:
+        pitch_score += 0.3
+    elif 10 <= pitch_std <= 150:
+        pitch_score += 0.15
+    
+    # 滑らかさ
+    pitch_score += smoothness * 0.3
+    
+    return min(pitch_score, 1.0)
+
+def calculate_rhythm_score(tempo: float, consistency: float, stress_pattern: str) -> float:
+    """リズムスコア計算"""
+    # 適切なテンポ（60-180 BPM）
+    tempo_score = 0
+    if 60 <= tempo <= 180:
+        tempo_score += 0.4
+    elif 40 <= tempo <= 200:
+        tempo_score += 0.2
+    
+    # リズムの一貫性
+    rhythm_score = consistency * 0.4
+    
+    # ストレスパターン
+    stress_score = 0.2 if stress_pattern == "natural" else 0
+    
+    return min(tempo_score + rhythm_score + stress_score, 1.0)
+
+def calculate_boundary_score(quality: float, count: int) -> float:
+    """音素境界スコア計算"""
+    # 境界の品質と数のバランス
+    if count > 0:
+        return min(quality * 0.7 + (count / 20) * 0.3, 1.0)
+    return 0
+
+def calculate_pitch_smoothness(pitches: np.ndarray) -> float:
+    """ピッチの滑らかさ計算"""
+    if len(pitches) < 2:
+        return 0
+    
+    # ピッチ変化の標準偏差
+    pitch_changes = np.diff(pitches)
+    smoothness = 1.0 / (1.0 + np.std(pitch_changes))
+    return float(smoothness)
+
+def analyze_stress_pattern(y: np.ndarray, sr: int) -> str:
+    """ストレスパターン分析"""
+    # エネルギーの時間変化
+    rms = librosa.feature.rms(y=y)
+    
+    # ストレスパターンの検出
+    energy_peaks = signal.find_peaks(rms[0], height=np.mean(rms[0])*1.2)[0]
+    
+    if len(energy_peaks) > 0:
+        return "natural"
+    else:
+        return "flat"
+
+def generate_detailed_feedback(formants: Dict, pitch: Dict, rhythm: Dict, 
+                             phoneme: Dict, katakana: Dict) -> List[str]:
+    """詳細フィードバック生成"""
+    feedback = []
+    
+    # フォルマントフィードバック
+    if formants["score"] < 0.5:
+        feedback.append("母音の発音をより正確にしてください")
+    
+    # ピッチフィードバック
+    if pitch["score"] < 0.5:
+        feedback.append("イントネーションをより自然にしてください")
+    
+    # リズムフィードバック
+    if rhythm["score"] < 0.5:
+        feedback.append("リズムをより自然にしてください")
+    
+    # カタカナフィードバック
+    if katakana["detected"]:
+        feedback.append("カタカナ発音を避け、ネイティブ発音を心がけてください")
+    
+    if not feedback:
+        feedback.append("素晴らしい発音です！")
+    
+    return feedback
+
+if __name__ == "__main__":
+    if len(sys.argv) != 3:
+        print(json.dumps({"error": "Usage: python advanced_evaluation.py <audio_file> <reference_text>"}))
+        sys.exit(1)
+    
+    audio_file = sys.argv[1]
+    reference_text = sys.argv[2]
+    
+    result = analyze_pronunciation(audio_file, reference_text)
+    print(json.dumps(result, ensure_ascii=False)) 

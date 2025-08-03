@@ -1,6 +1,4 @@
-# Python dependencies for audio analysis
-librosa
-dtw-python
-numpy
-scipy
-soundfile 
+librosa==0.10.1
+numpy==1.24.3
+scipy==1.11.1
+soundfile==0.12.1 
