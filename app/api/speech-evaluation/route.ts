@@ -593,40 +593,52 @@ function createDemoResult(error: Error): PronunciationAssessmentResult {
 function combineResults(azureResult: PronunciationAssessmentResult, advancedResult: any): PronunciationAssessmentResult {
   console.log('=== COMBINING AZURE AND ADVANCED RESULTS ===')
   
-  // Azure結果をベースにする
-  const combined = { ...azureResult }
+  // Azureスコア（0-100）
+  const azureScore = azureResult.pronunciationScore || 0
   
-  // 高度な分析結果を追加
-  if (advancedResult && advancedResult.success) {
-    combined.advancedAnalysis = advancedResult
-    
-    // 高度な分析のスコアを考慮して総合スコアを調整
-    const advancedScore = advancedResult.overallScore || 0
-    const azureScore = azureResult.pronunciationScore || 0
-    
-    // 重み付け平均（Azure: 60%, Advanced: 40%）
-    const combinedScore = Math.round(azureScore * 0.6 + advancedScore * 0.4)
-    combined.pronunciationScore = combinedScore
-    
-    // グレードを再計算
-    combined.overallGrade = getGradeFromScore(combinedScore)
-    combined.isPass = combinedScore >= 70
-    
-    // 詳細フィードバックを統合
-    if (advancedResult.detailedFeedback) {
-      combined.improvements = [...combined.improvements, ...advancedResult.detailedFeedback]
-    }
-    
-    // カタカナ検出結果を追加
-    if (advancedResult.katakanaDetection) {
-      if (advancedResult.katakanaDetection.detected) {
-        combined.improvements.push('カタカナ発音が検出されました。ネイティブ発音を心がけてください。')
-      }
-    }
-    
-    console.log('Combined score:', combinedScore)
-    console.log('Combined grade:', combined.overallGrade)
+  // Pythonスコア（0-100に正規化）
+  const pythonScore = advancedResult.success ? advancedResult.overallScore : 0
+  
+  console.log(`Azure score: ${azureScore}`)
+  console.log(`Python score: ${pythonScore}`)
+  
+  // より適切な重み付け（Azureを重視）
+  const azureWeight = 0.8  // Azure 80%
+  const pythonWeight = 0.2  // Python 20%
+  
+  // 統合スコア計算
+  const combinedScore = Math.round(
+    (azureScore * azureWeight) + (pythonScore * pythonWeight)
+  )
+  
+  // グレード計算
+  const combinedGrade = getGradeFromScore(combinedScore)
+  const gradeDescription = getGradeDescription(combinedGrade)
+  
+  console.log(`Combined score: ${combinedScore}`)
+  console.log(`Combined grade: ${combinedGrade}`)
+  
+  // 改善点とポジティブポイントの統合
+  const improvements = [
+    ...azureResult.improvements,
+    ...(advancedResult.success && advancedResult.detailedFeedback ? advancedResult.detailedFeedback : [])
+  ]
+  
+  const positives = [
+    ...azureResult.positives,
+    ...(advancedResult.success && advancedResult.katakanaDetection && !advancedResult.katakanaDetection.detected ? 
+        ['カタカナ発音ではありません'] : [])
+  ]
+  
+  return {
+    ...azureResult,
+    overallGrade: combinedGrade,
+    gradeDescription: gradeDescription,
+    pronunciationScore: combinedScore,
+    improvements: improvements,
+    positives: positives,
+    feedback: `統合評価スコア: ${combinedScore}/100。${gradeDescription}`,
+    isPass: combinedScore >= 70,  // 70点以上で合格
+    advancedAnalysis: advancedResult.success ? advancedResult : null
   }
-  
-  return combined
 }
