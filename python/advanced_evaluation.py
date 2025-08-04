@@ -266,42 +266,59 @@ def detect_katakana_pronunciation(y: np.ndarray, sr: int) -> Dict:
 def calculate_overall_score(formants: Dict, pitch: Dict, rhythm: Dict, 
                           phoneme: Dict, katakana: Dict, energy: float) -> float:
     """
-    総合スコア計算（大幅改善版）
+    総合スコア計算（完全に書き直し）
     """
-    # 各要素の重み付け（より現実的）
-    formant_weight = 0.15
-    pitch_weight = 0.30
-    rhythm_weight = 0.25
-    phoneme_weight = 0.15
-    katakana_weight = 0.15
+    # 基本スコア（70-90点の範囲）
+    base_score = 75.0
     
-    # スコア計算
-    formant_score = formants.get("score", 0)
+    # 各要素の調整
+    adjustments = []
+    
+    # 1. ピッチ分析（イントネーション）
     pitch_score = pitch.get("score", 0)
-    rhythm_score = rhythm.get("score", 0)
-    phoneme_score = phoneme.get("score", 0)
-    katakana_score = katakana.get("score", 0)
-    
-    # カタカナ検出の重みを調整
-    if katakana.get("detected", False):
-        katakana_score = 0.3  # カタカナ発音の場合は大幅減点
+    if pitch_score > 0.7:
+        adjustments.append(10)  # 良いピッチ
+    elif pitch_score > 0.5:
+        adjustments.append(5)   # 普通のピッチ
     else:
-        katakana_score = 0.9  # カタカナでない場合は高スコア
+        adjustments.append(-5)  # 悪いピッチ
     
-    # エネルギー補正（より緩い条件）
-    energy_factor = min(energy * 2, 1.0)  # エネルギー補正をさらに緩和
+    # 2. リズム分析
+    rhythm_score = rhythm.get("score", 0)
+    if rhythm_score > 0.8:
+        adjustments.append(10)  # 良いリズム
+    elif rhythm_score > 0.6:
+        adjustments.append(5)   # 普通のリズム
+    else:
+        adjustments.append(-5)  # 悪いリズム
     
-    # 総合スコア（大幅に改善）
-    overall_score = (
-        formant_score * formant_weight +
-        pitch_score * pitch_weight +
-        rhythm_score * rhythm_weight +
-        phoneme_score * phoneme_weight +
-        katakana_score * katakana_weight
-    ) * energy_factor
+    # 3. 音素分析
+    phoneme_score = phoneme.get("score", 0)
+    if phoneme_score > 0.5:
+        adjustments.append(5)   # 良い音素境界
+    else:
+        adjustments.append(-3)  # 悪い音素境界
     
-    # スコアを0-100の範囲に調整（より高く）
-    return float(np.clip(overall_score * 120, 0, 100))  # 120倍して上限100に
+    # 4. カタカナ検出（重要）
+    if katakana.get("detected", False):
+        adjustments.append(-20)  # カタカナ発音は大幅減点
+    else:
+        adjustments.append(10)   # カタカナでない場合は加点
+    
+    # 5. エネルギー補正
+    if energy > 0.1:
+        adjustments.append(5)   # 適切なエネルギー
+    elif energy > 0.05:
+        adjustments.append(0)   # 普通のエネルギー
+    else:
+        adjustments.append(-5)  # 低すぎるエネルギー
+    
+    # 総合スコア計算
+    total_adjustment = sum(adjustments)
+    final_score = base_score + total_adjustment
+    
+    # 0-100の範囲に制限
+    return float(np.clip(final_score, 0, 100))
 
 def calculate_formant_score(f1: float, f2: float, f3: float) -> float:
     """フォルマントスコア計算（緩和版）"""

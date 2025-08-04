@@ -592,33 +592,28 @@ function createDemoResult(error: Error): PronunciationAssessmentResult {
 function combineResults(azureResult: PronunciationAssessmentResult, advancedResult: any): PronunciationAssessmentResult {
   console.log('=== COMBINING AZURE AND ADVANCED RESULTS ===')
   
-  // Azureスコア（0-100）- 主軸
-  const azureScore = azureResult.pronunciationScore || 0
-  
-  // Pythonスコア（補助的）- より現実的な評価
-  let pythonScore = 0
+  // Python分析を主軸とする
+  let primaryScore = 0
   if (advancedResult.success) {
-    // Python分析が成功した場合、Azureスコアをベースに微調整
-    const baseScore = azureScore
-    const katakanaPenalty = advancedResult.katakanaDetection?.detected ? -20 : 0
-    const pitchBonus = advancedResult.pitchAnalysis?.score > 0.7 ? 5 : 0
-    const rhythmBonus = advancedResult.rhythmAnalysis?.score > 0.8 ? 5 : 0
-    
-    pythonScore = Math.max(0, Math.min(100, baseScore + katakanaPenalty + pitchBonus + rhythmBonus))
+    primaryScore = advancedResult.overallScore
   } else {
-    pythonScore = azureScore // Python分析が失敗した場合はAzureスコアを使用
+    // Python分析が失敗した場合のみAzureを使用
+    primaryScore = azureResult.pronunciationScore || 0
   }
   
-  console.log(`Azure score: ${azureScore}`)
-  console.log(`Python adjusted score: ${pythonScore}`)
+  // Azureスコア（補助的）
+  const azureScore = azureResult.pronunciationScore || 0
   
-  // 重み付け（Azureを重視）
-  const azureWeight = 0.8  // Azure 80%
-  const pythonWeight = 0.2  // Python 20%
+  console.log(`Primary (Python) score: ${primaryScore}`)
+  console.log(`Azure score: ${azureScore}`)
+  
+  // 重み付け（Python分析を重視）
+  const primaryWeight = 0.8  // Python 80%
+  const azureWeight = 0.2    // Azure 20%
   
   // 統合スコア計算
   const combinedScore = Math.round(
-    (azureScore * azureWeight) + (pythonScore * pythonWeight)
+    (primaryScore * primaryWeight) + (azureScore * azureWeight)
   )
   
   // グレード計算
