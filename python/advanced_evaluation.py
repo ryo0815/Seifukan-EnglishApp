@@ -304,75 +304,75 @@ def calculate_overall_score(formants: Dict, pitch: Dict, rhythm: Dict,
     return float(np.clip(overall_score * 100, 0, 100))
 
 def calculate_formant_score(f1: float, f2: float, f3: float) -> float:
-    """フォルマントスコア計算"""
-    # 英語の母音の典型的なフォルマント範囲
+    """フォルマントスコア計算（緩和版）"""
+    # 英語の母音の典型的なフォルマント範囲（より緩い条件）
     english_vowel_ranges = [
-        (300, 800, 2000, 3000),   # /i/
-        (400, 900, 1800, 2800),   # /ɪ/
-        (500, 1000, 1600, 2600),  # /e/
-        (600, 1200, 1400, 2400),  # /æ/
-        (700, 1100, 1200, 2200),  # /ɑ/
-        (400, 800, 1200, 2000),   # /ʌ/
-        (300, 700, 1000, 1800),   # /u/
-        (400, 800, 1100, 1900),   # /ʊ/
+        (200, 900, 1500, 3500),   # /i/ - より広い範囲
+        (300, 1000, 1600, 3200),  # /ɪ/
+        (400, 1100, 1400, 3000),  # /e/
+        (500, 1300, 1200, 2800),  # /æ/
+        (600, 1200, 1000, 2600),  # /ɑ/
+        (300, 900, 1100, 2400),   # /ʌ/
+        (200, 800, 900, 2200),    # /u/
+        (300, 900, 1000, 2400),   # /ʊ/
     ]
     
     best_score = 0
     for f1_range, f2_range, f3_range, _ in english_vowel_ranges:
         score = 0
         if f1_range[0] <= f1 <= f1_range[1]:
-            score += 0.4
+            score += 0.5  # より高いスコア
         if f2_range[0] <= f2 <= f2_range[1]:
             score += 0.4
         if f3_range[0] <= f3 <= f3_range[1]:
-            score += 0.2
+            score += 0.1
         best_score = max(best_score, score)
     
-    return best_score
+    return min(best_score, 1.0)
 
 def calculate_pitch_score(mean_pitch: float, pitch_std: float, smoothness: float) -> float:
-    """ピッチスコア計算"""
-    # 適切なピッチ範囲（100-400Hz）
+    """ピッチスコア計算（緩和版）"""
+    # より広いピッチ範囲（80-600Hz）
     pitch_score = 0
-    if 100 <= mean_pitch <= 400:
-        pitch_score += 0.4
-    elif 80 <= mean_pitch <= 500:
+    if 80 <= mean_pitch <= 600:
+        pitch_score += 0.5
+    elif 60 <= mean_pitch <= 700:
+        pitch_score += 0.3
+    
+    # ピッチ変化の適切さ（より緩い条件）
+    if 10 <= pitch_std <= 200:
+        pitch_score += 0.3
+    elif 5 <= pitch_std <= 300:
         pitch_score += 0.2
     
-    # ピッチ変化の適切さ
-    if 20 <= pitch_std <= 100:
-        pitch_score += 0.3
-    elif 10 <= pitch_std <= 150:
-        pitch_score += 0.15
-    
     # 滑らかさ
-    pitch_score += smoothness * 0.3
+    pitch_score += smoothness * 0.2
     
     return min(pitch_score, 1.0)
 
 def calculate_rhythm_score(tempo: float, consistency: float, stress_pattern: str) -> float:
-    """リズムスコア計算"""
-    # 適切なテンポ（60-180 BPM）
+    """リズムスコア計算（緩和版）"""
+    # より広いテンポ範囲（40-200 BPM）
     tempo_score = 0
-    if 60 <= tempo <= 180:
-        tempo_score += 0.4
-    elif 40 <= tempo <= 200:
-        tempo_score += 0.2
+    if 40 <= tempo <= 200:
+        tempo_score += 0.5
+    elif 30 <= tempo <= 250:
+        tempo_score += 0.3
     
     # リズムの一貫性
-    rhythm_score = consistency * 0.4
+    rhythm_score = consistency * 0.3
     
     # ストレスパターン
-    stress_score = 0.2 if stress_pattern == "natural" else 0
+    stress_score = 0.2 if stress_pattern == "natural" else 0.1
     
     return min(tempo_score + rhythm_score + stress_score, 1.0)
 
 def calculate_boundary_score(quality: float, count: int) -> float:
-    """音素境界スコア計算"""
-    # 境界の品質と数のバランス
+    """音素境界スコア計算（緩和版）"""
+    # 境界の品質と数のバランス（より緩い条件）
     if count > 0:
-        return min(quality * 0.7 + (count / 20) * 0.3, 1.0)
-    return 0
+        return min(quality * 0.6 + (count / 15) * 0.4, 1.0)  # より緩い条件
+    return 0.2  # 最低スコアを上げる
 
 def calculate_pitch_smoothness(pitches: np.ndarray) -> float:
     """ピッチの滑らかさ計算"""
