@@ -123,7 +123,7 @@ def extract_formants(y: np.ndarray, sr: int) -> Dict:
         "f2_mean": 0,
         "f3_mean": 0,
         "formant_stability": 0,
-        "score": 0.3  # デフォルトスコアを少し上げる
+        "score": 0.6  # デフォルトスコアを大幅に上げる
     }
 
 def extract_pitch_contour(y: np.ndarray, sr: int) -> Dict:
@@ -266,14 +266,14 @@ def detect_katakana_pronunciation(y: np.ndarray, sr: int) -> Dict:
 def calculate_overall_score(formants: Dict, pitch: Dict, rhythm: Dict, 
                           phoneme: Dict, katakana: Dict, energy: float) -> float:
     """
-    総合スコア計算（ネイティブ発音を重視）
+    総合スコア計算（より現実的）
     """
-    # 各要素の重み付け（カタカナ検出を重視）
-    formant_weight = 0.20
+    # 各要素の重み付け（バランス重視）
+    formant_weight = 0.15
     pitch_weight = 0.25
-    rhythm_weight = 0.20
+    rhythm_weight = 0.25
     phoneme_weight = 0.15
-    katakana_weight = 0.20  # カタカナ検出を重視
+    katakana_weight = 0.20  # カタカナ検出は維持
     
     # スコア計算
     formant_score = formants.get("score", 0)
@@ -282,14 +282,14 @@ def calculate_overall_score(formants: Dict, pitch: Dict, rhythm: Dict,
     phoneme_score = phoneme.get("score", 0)
     katakana_score = katakana.get("score", 0)
     
-    # カタカナ検出の重みを増加
+    # カタカナ検出の重みを調整
     if katakana.get("detected", False):
-        katakana_score = 0  # カタカナ発音の場合は大幅減点
+        katakana_score = 0.2  # カタカナ発音の場合は大幅減点
     else:
-        katakana_score = 1.0  # カタカナでない場合は満点
+        katakana_score = 0.8  # カタカナでない場合は高スコア
     
     # エネルギー補正（より緩い条件）
-    energy_factor = min(energy * 5, 1.0)  # エネルギー補正を緩和
+    energy_factor = min(energy * 3, 1.0)  # エネルギー補正をさらに緩和
     
     # 総合スコア
     overall_score = (
@@ -372,7 +372,7 @@ def calculate_boundary_score(quality: float, count: int) -> float:
     # 境界の品質と数のバランス（より緩い条件）
     if count > 0:
         return min(quality * 0.6 + (count / 15) * 0.4, 1.0)  # より緩い条件
-    return 0.2  # 最低スコアを上げる
+    return 0.5  # 最低スコアを大幅に上げる
 
 def calculate_pitch_smoothness(pitches: np.ndarray) -> float:
     """ピッチの滑らかさ計算"""

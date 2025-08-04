@@ -602,9 +602,9 @@ function combineResults(azureResult: PronunciationAssessmentResult, advancedResu
   console.log(`Azure score: ${azureScore}`)
   console.log(`Python score: ${pythonScore}`)
   
-  // より適切な重み付け（高度な分析を重視）
-  const azureWeight = 0.3  // Azure 30%
-  const pythonWeight = 0.7  // Python 70%
+  // より現実的な重み付け
+  const azureWeight = 0.6  // Azure 60%
+  const pythonWeight = 0.4  // Python 40%
   
   // 統合スコア計算
   const combinedScore = Math.round(
