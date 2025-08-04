@@ -266,14 +266,14 @@ def detect_katakana_pronunciation(y: np.ndarray, sr: int) -> Dict:
 def calculate_overall_score(formants: Dict, pitch: Dict, rhythm: Dict, 
                           phoneme: Dict, katakana: Dict, energy: float) -> float:
     """
-    総合スコア計算（より現実的）
+    総合スコア計算（大幅改善版）
     """
-    # 各要素の重み付け（バランス重視）
+    # 各要素の重み付け（より現実的）
     formant_weight = 0.15
-    pitch_weight = 0.25
+    pitch_weight = 0.30
     rhythm_weight = 0.25
     phoneme_weight = 0.15
-    katakana_weight = 0.20  # カタカナ検出は維持
+    katakana_weight = 0.15
     
     # スコア計算
     formant_score = formants.get("score", 0)
@@ -284,14 +284,14 @@ def calculate_overall_score(formants: Dict, pitch: Dict, rhythm: Dict,
     
     # カタカナ検出の重みを調整
     if katakana.get("detected", False):
-        katakana_score = 0.2  # カタカナ発音の場合は大幅減点
+        katakana_score = 0.3  # カタカナ発音の場合は大幅減点
     else:
-        katakana_score = 0.8  # カタカナでない場合は高スコア
+        katakana_score = 0.9  # カタカナでない場合は高スコア
     
     # エネルギー補正（より緩い条件）
-    energy_factor = min(energy * 3, 1.0)  # エネルギー補正をさらに緩和
+    energy_factor = min(energy * 2, 1.0)  # エネルギー補正をさらに緩和
     
-    # 総合スコア
+    # 総合スコア（大幅に改善）
     overall_score = (
         formant_score * formant_weight +
         pitch_score * pitch_weight +
@@ -300,8 +300,8 @@ def calculate_overall_score(formants: Dict, pitch: Dict, rhythm: Dict,
         katakana_score * katakana_weight
     ) * energy_factor
     
-    # スコアを0-100の範囲に調整
-    return float(np.clip(overall_score * 100, 0, 100))
+    # スコアを0-100の範囲に調整（より高く）
+    return float(np.clip(overall_score * 120, 0, 100))  # 120倍して上限100に
 
 def calculate_formant_score(f1: float, f2: float, f3: float) -> float:
     """フォルマントスコア計算（緩和版）"""

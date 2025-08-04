@@ -528,14 +528,13 @@ function getGradeFromScore(score: number): 'A' | 'B' | 'C' | 'D' | 'E' {
 }
 
 function getGradeDescription(grade: 'A' | 'B' | 'C' | 'D' | 'E'): string {
-  const descriptions = {
-    'A': '優秀 - ネイティブレベルの発音',
-    'B': '良好 - 非常に理解しやすい発音',
-    'C': '普通 - 理解できる発音',
-    'D': '要改善 - 発音練習が必要',
-    'E': '大幅改善必要 - 集中的な練習が必要'
+  switch (grade) {
+    case 'A': return '優秀 - ネイティブレベルの発音'
+    case 'B': return '良好 - 非常に理解しやすい発音'
+    case 'C': return '普通 - 理解できる発音'
+    case 'D': return '要改善 - 発音練習が必要'
+    case 'E': return '大幅改善必要 - 集中的な練習が必要'
   }
-  return descriptions[grade]
 }
 
 function generateImprovements(accuracy: number, fluency: number, completeness: number): string[] {
@@ -638,7 +637,7 @@ function combineResults(azureResult: PronunciationAssessmentResult, advancedResu
     improvements: improvements,
     positives: positives,
     feedback: `統合評価スコア: ${combinedScore}/100。${gradeDescription}`,
-    isPass: combinedScore >= 60,  // 60点以上で合格に緩和
+    isPass: combinedScore >= 70 && combinedGrade !== 'D' && combinedGrade !== 'E',  // C以上で合格
     advancedAnalysis: advancedResult.success ? advancedResult : null
   }
 }
