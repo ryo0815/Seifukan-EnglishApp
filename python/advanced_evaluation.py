@@ -82,38 +82,40 @@ def extract_formants(y: np.ndarray, sr: int) -> Dict:
     """
     フォルマント分析（母音の特徴を抽出）
     """
-    # 短時間フーリエ変換
-    stft = librosa.stft(y, n_fft=2048, hop_length=512)
-    
-    # スペクトログラム
-    spec = np.abs(stft)
-    
-    # フォルマント周波数推定
-    formant_freqs = []
-    for i in range(0, spec.shape[1], 10):  # 10フレームごとに分析
-        frame = spec[:, i]
-        if np.max(frame) > 0:
-            # ピーク検出
-            peaks, _ = signal.find_peaks(frame, height=np.max(frame)*0.1)
-            if len(peaks) >= 3:
-                # 上位3つのピークをフォルマントとして使用
-                formant_freqs.append(peaks[:3].tolist())
-    
-    # フォルマント統計
-    if formant_freqs and len(formant_freqs) > 0:
-        formant_freqs = np.array(formant_freqs)
-        if formant_freqs.shape[1] >= 3:  # 3つのフォルマントがあることを確認
-            f1_mean = np.mean(formant_freqs[:, 0]) if len(formant_freqs) > 0 else 0
-            f2_mean = np.mean(formant_freqs[:, 1]) if len(formant_freqs) > 0 else 0
-            f3_mean = np.mean(formant_freqs[:, 2]) if len(formant_freqs) > 0 else 0
-            
-            return {
-                "f1_mean": float(f1_mean),
-                "f2_mean": float(f2_mean),
-                "f3_mean": float(f3_mean),
-                "formant_stability": float(np.std(formant_freqs)),
-                "score": calculate_formant_score(f1_mean, f2_mean, f3_mean)
-            }
+    try:
+        # 短時間フーリエ変換
+        stft = librosa.stft(y, n_fft=1024, hop_length=256)  # より短いフレーム
+        
+        # スペクトログラム
+        spec = np.abs(stft)
+        
+        # フォルマント周波数推定
+        formant_freqs = []
+        for i in range(0, spec.shape[1], 5):  # より細かい間隔で分析
+            frame = spec[:, i]
+            if np.max(frame) > 0:
+                # ピーク検出（より緩い条件）
+                peaks, _ = signal.find_peaks(frame, height=np.max(frame)*0.05)
+                if len(peaks) >= 2:  # 2つ以上のピークがあればOK
+                    # 上位2つのピークをフォルマントとして使用
+                    formant_freqs.append(peaks[:2].tolist())
+        
+        # フォルマント統計
+        if formant_freqs and len(formant_freqs) > 0:
+            formant_freqs = np.array(formant_freqs)
+            if formant_freqs.shape[1] >= 2:  # 2つのフォルマントがあることを確認
+                f1_mean = np.mean(formant_freqs[:, 0]) if len(formant_freqs) > 0 else 0
+                f2_mean = np.mean(formant_freqs[:, 1]) if len(formant_freqs) > 0 else 0
+                
+                return {
+                    "f1_mean": float(f1_mean),
+                    "f2_mean": float(f2_mean),
+                    "f3_mean": 0,  # 3つ目のフォルマントは省略
+                    "formant_stability": float(np.std(formant_freqs)),
+                    "score": calculate_formant_score(f1_mean, f2_mean, 0)
+                }
+    except Exception as e:
+        print(f"Formant analysis error: {e}", file=sys.stderr)
     
     # フォルマントが見つからない場合のデフォルト値
     return {
@@ -121,7 +123,7 @@ def extract_formants(y: np.ndarray, sr: int) -> Dict:
         "f2_mean": 0,
         "f3_mean": 0,
         "formant_stability": 0,
-        "score": 0
+        "score": 0.3  # デフォルトスコアを少し上げる
     }
 
 def extract_pitch_contour(y: np.ndarray, sr: int) -> Dict:
@@ -264,14 +266,14 @@ def detect_katakana_pronunciation(y: np.ndarray, sr: int) -> Dict:
 def calculate_overall_score(formants: Dict, pitch: Dict, rhythm: Dict, 
                           phoneme: Dict, katakana: Dict, energy: float) -> float:
     """
-    総合スコア計算
+    総合スコア計算（ネイティブ発音を重視）
     """
-    # 各要素の重み付け
-    formant_weight = 0.25
+    # 各要素の重み付け（カタカナ検出を重視）
+    formant_weight = 0.20
     pitch_weight = 0.25
     rhythm_weight = 0.20
     phoneme_weight = 0.15
-    katakana_weight = 0.15
+    katakana_weight = 0.20  # カタカナ検出を重視
     
     # スコア計算
     formant_score = formants.get("score", 0)
@@ -280,8 +282,14 @@ def calculate_overall_score(formants: Dict, pitch: Dict, rhythm: Dict,
     phoneme_score = phoneme.get("score", 0)
     katakana_score = katakana.get("score", 0)
     
-    # エネルギー補正
-    energy_factor = min(energy * 10, 1.0)  # エネルギーが低すぎると減点
+    # カタカナ検出の重みを増加
+    if katakana.get("detected", False):
+        katakana_score = 0  # カタカナ発音の場合は大幅減点
+    else:
+        katakana_score = 1.0  # カタカナでない場合は満点
+    
+    # エネルギー補正（より緩い条件）
+    energy_factor = min(energy * 5, 1.0)  # エネルギー補正を緩和
     
     # 総合スコア
     overall_score = (
@@ -292,6 +300,7 @@ def calculate_overall_score(formants: Dict, pitch: Dict, rhythm: Dict,
         katakana_score * katakana_weight
     ) * energy_factor
     
+    # スコアを0-100の範囲に調整
     return float(np.clip(overall_score * 100, 0, 100))
 
 def calculate_formant_score(f1: float, f2: float, f3: float) -> float:
