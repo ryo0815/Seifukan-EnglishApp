@@ -637,7 +637,7 @@ function combineResults(azureResult: PronunciationAssessmentResult, advancedResu
     improvements: improvements,
     positives: positives,
     feedback: `統合評価スコア: ${combinedScore}/100。${gradeDescription}`,
-    isPass: combinedScore >= 70 && combinedGrade !== 'D' && combinedGrade !== 'E',  // C以上で合格
+    isPass: combinedScore >= 80 && (combinedGrade === 'A' || combinedGrade === 'B'),  // B以上で合格
     advancedAnalysis: advancedResult.success ? advancedResult : null
   }
 }
